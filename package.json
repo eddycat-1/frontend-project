@@ -21,6 +21,8 @@
     "typescript": "5.0.2"
   },
   "devDependencies": {
-    "@types/three": "^0.149.0"
+    "@types/dat.gui": "^0.7.9",
+    "@types/three": "^0.149.0",
+    "dat.gui": "^0.7.9"
   }
 }

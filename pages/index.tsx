@@ -4,93 +4,154 @@ import styles from "@/styles/Home.module.css";
 import React, { useEffect, useRef } from "react";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import * as THREE from "three";
-import data from "../public/data/0000.bin.json";
-import data2 from "../public/data/0001.bin.json";
-import data3 from "../public/data/0002.bin.json";
-import data4 from "../public/data/0003.bin.json";
-import data5 from "../public/data/0004.bin.json";
-import data6 from "../public/data/0005.bin.json";
-import data7 from "../public/data/0006.bin.json";
-import data8 from "../public/data/0007.bin.json";
+import {
+  mapNumberToColor,
+  findMinMaxZ,
+  mapZtoColor,
+} from "@/utils/data.helper";
 
-// TODO: Import data from JSON file
-// TODO: Display Data as Points in 3D Space
+/** LOAD DATA */
+const framesData: any[] = [];
+for (let i = 0; i < 30; i++) {
+  framesData.push(require(`../public/data/${i}.bin.json`));
+}
+
+/** TYPES */
+enum ColoringType {
+  height = "height",
+  distance = "distance",
+  reflection = "reflection",
+}
+
+interface GuiControls extends Record<string, unknown> {
+  coloringType: ColoringType;
+  frame: number;
+}
+
+/** CONSTANTS */
+let play = false;
+let initGuiCalled = false;
+let points;
+
 // TODO: Gui Controls for Camera
-// TODO: Boxes Surrounding Labels
+// TODO: Frame the data in a box
+// TODO: 3D bounding boxes information
 
 export default function Home() {
   const canvasRef = useRef(null);
 
-  // data.data.forEach((element) => {
-  //   points.push(new THREE.Point());
-  //   console.log(points[-1]);
-  //   points[-1].position.set(element[0], element[1], element[2]);
-  // });
+  let guiControls: GuiControls = {
+    coloringType: ColoringType.height,
+    frame: 0,
+  };
+
+  // Reference Error for Dat.gui
+  const initGUI = async () => {
+    const dat = await import("dat.gui");
+    const gui = new dat.GUI();
+    const colouringTypeFolder = gui.addFolder("Coloring Options");
+    colouringTypeFolder.add(guiControls, "coloringType", 0, 2, 1);
+    colouringTypeFolder.open();
+    const frameFolder = gui.addFolder("Select Frame");
+    frameFolder.add(guiControls, "frame", 0, 29, 1);
+    frameFolder.open();
+  };
+
+  // TODO: Create Point Array for each z level
+
+  const createPoints = (positions: number[][], coloringType: ColoringType) => {
+    // if (coloringType === ColoringType.height) {
+    // Take second value due to transform
+    const zValues = positions.map((pos) => pos.slice(1, 2));
+
+    const zMinMax = findMinMaxZ(zValues);
+
+    const zRange = zMinMax.maxZ - zMinMax.minZ;
+
+    const colors = [];
+    const color = new THREE.Color();
+
+    for (let i = 0; i < positions.length; i++) {
+      const z = positions[i][1];
+      const vertexColor = mapZtoColor(
+        positions[i][1],
+        zMinMax.minZ,
+        zMinMax.maxZ
+      );
+      colors.push(vertexColor[0], vertexColor[1], vertexColor[2]);
+    }
+    // Create a buffer geometry to hold the positions
+    const pointGeometry = new THREE.BufferGeometry();
+
+    // Convert the positions to Float32Array and add them to the geometry
+    const positionArray = new Float32Array(positions.flat());
+    pointGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(positionArray, 3)
+    );
+
+    pointGeometry.setAttribute(
+      "color",
+      new THREE.Float32BufferAttribute(colors, 3)
+    );
+
+    pointGeometry.computeBoundingSphere();
+
+    const material = new THREE.PointsMaterial({
+      size: 0.01,
+      vertexColors: true,
+    });
+    // Create a points object with the geometry and material
+    return new THREE.Points(pointGeometry, material);
+  };
 
   useEffect(() => {
+    const buildPointsArray = framesData.map((frameData) => frameData.data);
+
     // Create a Three.js scene
     const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050505);
     const camera = new THREE.PerspectiveCamera(
       75,
       window.innerWidth / window.innerHeight,
       0.1,
       1000
     );
-    const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current });
+    const renderer = new THREE.WebGLRenderer({
+      canvas: canvasRef.current!,
+    });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
     // Create OrbitControls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; // Add damping to make controls smoother
     controls.dampingFactor = 0.05;
-    controls.screenSpacePanning = false;
+    controls.screenSpacePanning = true;
     controls.minDistance = 1;
     controls.maxDistance = 500;
 
-    const buildPointsArray = [
-      ...data.data,
-      ...data2.data,
-      ...data3.data,
-      ...data4.data,
-      ...data5.data,
-      ...data6.data,
-      ...data7.data,
-      ...data8.data,
-    ];
+    const pointFrames: THREE.Points<
+      THREE.BufferGeometry,
+      THREE.PointsMaterial
+    >[] = [];
 
-    const pointPositions = [];
-    // Add points to the scene
-    buildPointsArray.forEach((point) => {
-      pointPositions.push([point[0], point[1], point[2]]);
+    buildPointsArray.forEach((pointArray, index) => {
+      pointFrames.push(
+        createPoints(
+          pointArray.map((positionAndReflection: number[]) => [
+            positionAndReflection[0],
+            positionAndReflection[2],
+            positionAndReflection[1],
+          ]),
+          ColoringType.height
+        )
+      );
     });
 
-    // Create a buffer geometry to hold the positions
-    const pointGeometry = new THREE.BufferGeometry();
-
-    // Convert the positions to Float32Array and add them to the geometry
-    const positionArray = new Float32Array(pointPositions.flat());
-    pointGeometry.setAttribute(
-      "position",
-      new THREE.BufferAttribute(positionArray, 3)
-    );
-
-    // Create a points object with the geometry and material
-    const points = new THREE.Points(
-      pointGeometry,
-      new THREE.PointsMaterial({
-        size: 0.1,
-        color: "blue",
-      })
-    );
-
     // Add the points to the scene
+    let previousFrame = guiControls.frame;
+    points = pointFrames[previousFrame];
     scene.add(points);
-
-    // Add a cube to the scene
-    const geometry = new THREE.BoxGeometry();
-    const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
-    const cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
 
     // Add a point light to the scene
     const pointLight = new THREE.PointLight(0xffffff, 10, 100);
@@ -105,11 +166,40 @@ export default function Home() {
     camera.position.set(0, 0, 5);
     controls.update();
 
+    // Add a GUI
+
+    if (!initGuiCalled) {
+      initGUI();
+      initGuiCalled = true;
+    }
+
+    let frame = 0;
+    let lastIncrementTime = Date.now();
+    let incrementInterval = 100; // increment every 1 second
+
     // Animate the cube
     const animate = function () {
       requestAnimationFrame(animate);
-      // cube.rotation.x += 0.01;
-      // cube.rotation.y += 0.01;
+
+      // if (play) {
+      //   // Increment variable every incrementInterval milliseconds
+      //   const currentTime = Date.now();
+      //   if (currentTime - lastIncrementTime >= incrementInterval) {
+      //     frame++;
+      //     frame = frame % pointFrames.length;
+      //     lastIncrementTime = currentTime;
+      //     frame - 1 >= 0
+      //       ? scene.remove(pointFrames[frame - 1])
+      //       : scene.remove(pointFrames[pointFrames.length - 1]);
+      //     scene.add(pointFrames[frame]);
+      //   }
+      // }
+
+      if (previousFrame !== guiControls.frame) {
+        scene.remove(pointFrames[previousFrame]);
+        scene.add(pointFrames[guiControls.frame]);
+        previousFrame = guiControls.frame;
+      }
 
       // Update controls
       controls.update();
