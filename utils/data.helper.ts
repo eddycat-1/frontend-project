@@ -45,13 +45,14 @@ export const findMinMaxZ = (zArray: number[][]) => {
   );
 };
 
-export function mapZtoColor(z: number, minZ: number, maxZ: number) {
+export function mapToColor(value: number, min: number, max: number) {
   // Normalize z to be between 0 and 1
-  const normalizedZ = (z - minZ) / (maxZ - minZ);
+  const normalizedZ = (value - min) / (max - min);
   // Map normalizedZ to a colo  r using a gradient from blue to red
   const r = normalizedZ;
+  const g = Math.max(normalizedZ - 0.5, 0);
   const b = 1 - normalizedZ;
-  return [r, 0, b];
+  return [r, g, b];
 }
 
 // const divideIntoBuckets = (

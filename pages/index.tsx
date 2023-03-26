@@ -4,11 +4,7 @@ import styles from "@/styles/Home.module.css";
 import React, { useEffect, useRef } from "react";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import * as THREE from "three";
-import {
-  mapNumberToColor,
-  findMinMaxZ,
-  mapZtoColor,
-} from "@/utils/data.helper";
+import { mapNumberToColor, findMinMaxZ, mapToColor } from "@/utils/data.helper";
 
 /** LOAD DATA */
 const framesData: any[] = [];
@@ -24,7 +20,7 @@ enum ColoringType {
 }
 
 interface GuiControls extends Record<string, unknown> {
-  coloringType: ColoringType;
+  coloringType: { height: boolean; distance: boolean; reflection: boolean };
   frame: number;
 }
 
@@ -41,7 +37,11 @@ export default function Home() {
   const canvasRef = useRef(null);
 
   let guiControls: GuiControls = {
-    coloringType: ColoringType.height,
+    coloringType: {
+      height: false,
+      distance: false,
+      reflection: false,
+    },
     frame: 0,
   };
 
@@ -50,59 +50,125 @@ export default function Home() {
     const dat = await import("dat.gui");
     const gui = new dat.GUI();
     const colouringTypeFolder = gui.addFolder("Coloring Options");
-    colouringTypeFolder.add(guiControls, "coloringType", 0, 2, 1);
+    colouringTypeFolder
+      .add(guiControls.coloringType, "height")
+      .listen()
+      .onChange(function () {
+        setChecked(ColoringType.height);
+      });
+
+    colouringTypeFolder
+      .add(guiControls.coloringType, "distance")
+      .listen()
+      .onChange(function () {
+        setChecked(ColoringType.distance);
+      });
+
+    colouringTypeFolder
+      .add(guiControls.coloringType, "reflection")
+      .listen()
+      .onChange(function () {
+        setChecked(ColoringType.reflection);
+      });
+
+    const setChecked = (type: ColoringType) => {
+      for (let check in guiControls.coloringType) {
+        if (check !== type) {
+          (guiControls.coloringType as any)[check] = false;
+        } else {
+          guiControls.coloringType[check] = true;
+        }
+      }
+    };
+
     colouringTypeFolder.open();
     const frameFolder = gui.addFolder("Select Frame");
     frameFolder.add(guiControls, "frame", 0, 29, 1);
     frameFolder.open();
   };
 
-  // TODO: Create Point Array for each z level
-
   const createPoints = (positions: number[][], coloringType: ColoringType) => {
-    // if (coloringType === ColoringType.height) {
-    // Take second value due to transform
+    // Height Coloring
     const zValues = positions.map((pos) => pos.slice(1, 2));
 
     const zMinMax = findMinMaxZ(zValues);
 
-    const zRange = zMinMax.maxZ - zMinMax.minZ;
-
-    const colors = [];
-    const color = new THREE.Color();
+    const heightColoring = [];
 
     for (let i = 0; i < positions.length; i++) {
       const z = positions[i][1];
-      const vertexColor = mapZtoColor(
-        positions[i][1],
-        zMinMax.minZ,
-        zMinMax.maxZ
-      );
-      colors.push(vertexColor[0], vertexColor[1], vertexColor[2]);
+      const vertexColor = mapToColor(z, zMinMax.minZ, zMinMax.maxZ);
+      heightColoring.push(vertexColor[0], vertexColor[1], vertexColor[2]);
     }
-    // Create a buffer geometry to hold the positions
-    const pointGeometry = new THREE.BufferGeometry();
+
+    // Distance Coloring
+    const distanceColoring = [];
+    for (let i = 0; i < positions.length; i++) {
+      const x = positions[i][0];
+      const y = positions[i][2];
+      const distance = Math.sqrt(x * x + y * y);
+      const vertexColor = mapToColor(distance, 0, 30);
+      distanceColoring.push(vertexColor[0], vertexColor[1], vertexColor[2]);
+    }
+
+    // Reflection Coloring
+    const reflectionColoring = [];
+    for (let i = 0; i < positions.length; i++) {
+      const reflection = positions[i][3];
+      const vertexColor = mapToColor(reflection, 0, 0.4);
+      reflectionColoring.push(vertexColor[0], vertexColor[1], vertexColor[2]);
+    }
+
+    const greenColoring = [];
+    for (let i = 0; i < positions.length; i++) {
+      greenColoring.push(0, 1, 0);
+    }
+
+    const coloringArray = [
+      heightColoring,
+      distanceColoring,
+      reflectionColoring,
+      greenColoring,
+    ];
+
+    // Create buffer geometrys to hold the positions
+    const heightColoredGeometry = new THREE.BufferGeometry();
+    const distanceColoredGeometry = new THREE.BufferGeometry();
+    const reflectionColoredGeometry = new THREE.BufferGeometry();
+    const greenColoredGeometry = new THREE.BufferGeometry();
+    const pointGeometries = [
+      heightColoredGeometry,
+      distanceColoredGeometry,
+      reflectionColoredGeometry,
+      greenColoredGeometry,
+    ];
 
     // Convert the positions to Float32Array and add them to the geometry
-    const positionArray = new Float32Array(positions.flat());
-    pointGeometry.setAttribute(
-      "position",
-      new THREE.BufferAttribute(positionArray, 3)
-    );
+    const posOnly = positions.map((pos) => pos.slice(0, 3));
+    const positionArray = new Float32Array(posOnly.flat());
+    pointGeometries.forEach((geometry, index) => {
+      // Positioning
+      geometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(positionArray, 3)
+      );
 
-    pointGeometry.setAttribute(
-      "color",
-      new THREE.Float32BufferAttribute(colors, 3)
-    );
-
-    pointGeometry.computeBoundingSphere();
+      // Coloring
+      geometry.setAttribute(
+        "color",
+        new THREE.Float32BufferAttribute(coloringArray[index], 3)
+      );
+    });
 
     const material = new THREE.PointsMaterial({
       size: 0.01,
       vertexColors: true,
     });
+
     // Create a points object with the geometry and material
-    return new THREE.Points(pointGeometry, material);
+    return pointGeometries.map(
+      (geometry) => new THREE.Points(geometry, material)
+    );
   };
 
   useEffect(() => {
@@ -130,18 +196,17 @@ export default function Home() {
     controls.minDistance = 1;
     controls.maxDistance = 500;
 
-    const pointFrames: THREE.Points<
-      THREE.BufferGeometry,
-      THREE.PointsMaterial
-    >[] = [];
+    const frames: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>[][] =
+      [];
 
     buildPointsArray.forEach((pointArray, index) => {
-      pointFrames.push(
+      frames.push(
         createPoints(
           pointArray.map((positionAndReflection: number[]) => [
             positionAndReflection[0],
             positionAndReflection[2],
             positionAndReflection[1],
+            positionAndReflection[3],
           ]),
           ColoringType.height
         )
@@ -149,8 +214,11 @@ export default function Home() {
     });
 
     // Add the points to the scene
+    let coloringIndex = 3;
     let previousFrame = guiControls.frame;
-    points = pointFrames[previousFrame];
+    let previousColouringIndex = coloringIndex;
+
+    points = frames[previousFrame][coloringIndex];
     scene.add(points);
 
     // Add a point light to the scene
@@ -194,11 +262,23 @@ export default function Home() {
       //     scene.add(pointFrames[frame]);
       //   }
       // }
-
-      if (previousFrame !== guiControls.frame) {
-        scene.remove(pointFrames[previousFrame]);
-        scene.add(pointFrames[guiControls.frame]);
+      if (guiControls.coloringType.height) {
+        coloringIndex = 0;
+      } else if (guiControls.coloringType.distance) {
+        coloringIndex = 1;
+      } else if (guiControls.coloringType.reflection) {
+        coloringIndex = 2;
+      } else {
+        coloringIndex = 3;
+      }
+      if (
+        previousFrame !== guiControls.frame ||
+        previousColouringIndex !== coloringIndex
+      ) {
+        scene.remove(frames[previousFrame][previousColouringIndex]);
+        scene.add(frames[guiControls.frame][coloringIndex]);
         previousFrame = guiControls.frame;
+        previousColouringIndex = coloringIndex;
       }
 
       // Update controls
