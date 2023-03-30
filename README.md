@@ -29,18 +29,18 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 ## Features
 Here's a video demonstrating the features of the app: https://youtu.be/pHiUDKuVVdo
 
-## Coloring Options
+### Coloring Options
 
 Use the coloring options to control point colors
 
-## Frames
+### Frames
 
 Use the frame scrubber to select the frame
 
-## Labels
+### Labels
 
 Use the labels checkbox to turn on labels
 
-## Trails
+### Trails
 
 Turn on all trails or individual box trails. Move the frame scrubber to add/remove trails for different frames depending on the selected boxes.
