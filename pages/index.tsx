@@ -307,9 +307,6 @@ export default function Home() {
 
   const trailsPoints: any[] = [];
 
-  const trailFrameIds: string[] = trailsFrameData[0].map(
-    (box) => Object.keys(box)[0]
-  );
   trailsFrameData.forEach((trails) => {
     const individualTrailPoints: any[] = [];
     const trailKeys = trails.map((trail) => Object.keys(trail));
@@ -386,7 +383,7 @@ export default function Home() {
     controls.update();
 
     // Add a GUI
-
+    // TODO: Only allow for one GUI at a time to be created
     if (!initGuiCalled) {
       initGUI();
       initGuiCalled = true;
@@ -400,6 +397,7 @@ export default function Home() {
     const animate = function () {
       requestAnimationFrame(animate);
 
+      /* -------------------------------- COLORING -------------------------------- */
       if (guiControls.coloringType.height) {
         coloringIndex = 0;
       } else if (guiControls.coloringType.distance) {
@@ -410,6 +408,9 @@ export default function Home() {
         coloringIndex = 3;
       }
 
+      /* --------------------------------- TRAILS --------------------------------- */
+
+      // TODO: Delete all trails in all frames when allTrails is false
       if (guiControls.allTrails) {
         trailsPoints[guiControls.frame].forEach((pointsArray) => {
           scene.add(pointsArray);
@@ -418,16 +419,16 @@ export default function Home() {
         trailsPoints[guiControls.frame].forEach((pointsArray) => {
           scene.remove(pointsArray);
         });
+        Object.keys(guiControls.trails).forEach((key, index) => {
+          if (guiControls.trails[key][`${key}Trail`]) {
+            scene.add(trailsPoints[guiControls.frame][index]);
+          } else {
+            scene.remove(trailsPoints[guiControls.frame][index]);
+          }
+        });
       }
 
-      Object.keys(guiControls.trails).forEach((key, index) => {
-        if (guiControls.trails[key][`${key}Trail`]) {
-          scene.add(trailsPoints[guiControls.frame][index]);
-        } else {
-          scene.remove(trailsPoints[guiControls.frame][index]);
-        }
-      });
-
+      /* --------------------------- COLORING AND LABELS -------------------------- */
       if (
         previousFrame !== guiControls.frame ||
         previousColouringIndex !== coloringIndex
